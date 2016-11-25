@@ -127,6 +127,7 @@ LangString DESC_SecAddShortcuts ${LANG_ENGLISH} "Add ${PACKAGE_NAME} shortcuts t
 
 LangString DESC_SecFileAssociation ${LANG_ENGLISH} "Register ${PACKAGE_NAME} config file association (*.${OPENVPN_CONFIG_EXT})"
 
+LangString DESC_SecLaunchGUIOnStartup ${LANG_ENGLISH} "Launch ${PACKAGE_NAME} GUI on Windows startup."
 ;--------------------------------
 ;Reserve Files
   
@@ -322,6 +323,9 @@ Section /o "TAP Virtual Ethernet Adapter" SecTAP
 	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "tap" "installed"
 SectionEnd
 
+Section /o "Launch ${PACKAGE_NAME} GUI on Windows startup" SecLaunchGUIOnStartup
+SectionEnd
+
 Section /o "${PACKAGE_NAME} GUI" SecOpenVPNGUI
 
 	SetOverwrite on
@@ -337,6 +341,11 @@ Section /o "${PACKAGE_NAME} GUI" SecOpenVPNGUI
 		CreateDirectory "$SMPROGRAMS\${PACKAGE_NAME}"
 		CreateShortCut "$SMPROGRAMS\${PACKAGE_NAME}\${PACKAGE_NAME} GUI.lnk" "$INSTDIR\bin\openvpn-gui.exe" ""
 		CreateShortcut "$DESKTOP\${PACKAGE_NAME} GUI.lnk" "$INSTDIR\bin\openvpn-gui.exe"
+	${EndIf}
+	${If} ${SectionIsSelected} ${SecLaunchGUIOnStartup}
+		WriteRegStr HKLM "Software\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup" "" "OpenVPN Setup"
+		WriteRegStr HKLM "Software\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup" "Version" "2,4,0,0"
+		WriteRegStr HKLM "Software\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup" "StubPath" "reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v OPENVPN-GUI /t REG_SZ /d $\"$INSTDIR\bin\openvpn-gui.exe$\" /f"
 	${EndIf}
 SectionEnd
 
@@ -474,6 +483,7 @@ Function .onInit
 	!insertmacro SelectByParameter ${SecOpenVPNEasyRSA} SELECT_EASYRSA 0
 	!insertmacro SelectByParameter ${SecAddPath} SELECT_PATH 1
 	!insertmacro SelectByParameter ${SecAddShortcuts} SELECT_SHORTCUTS 1
+	!insertmacro SelectByParameter ${SecLaunchGUIOnStartup} SELECT_LAUNCH 1
 	!insertmacro SelectByParameter ${SecOpenSSLDLLs} SELECT_OPENSSLDLLS 1
 	!insertmacro SelectByParameter ${SecLZODLLs} SELECT_LZODLLS 1
 	!insertmacro SelectByParameter ${SecPKCS11DLLs} SELECT_PKCS11DLLS 1
@@ -574,6 +584,7 @@ SectionEnd
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecPKCS11DLLs} $(DESC_SecPKCS11DLLs)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecAddPath} $(DESC_SecAddPath)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecAddShortcuts} $(DESC_SecAddShortcuts)
+	!insertmacro MUI_DESCRIPTION_TEXT ${SecLaunchGUIOnStartup} $(DESC_SecLaunchGUIOnStartup)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecFileAssociation} $(DESC_SecFileAssociation)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
@@ -677,6 +688,7 @@ Section "Uninstall"
 	DeleteRegKey HKCR "${PACKAGE_NAME}File"
 	DeleteRegKey HKLM "SOFTWARE\${PACKAGE_NAME}"
 	DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}"
+	DeleteRegKey HKLM "SOFTWARE\Microsoft\Active Setup\Installed Componenets\${PACKAGE_NAME}_UserSetup"
 
 SectionEnd
 
