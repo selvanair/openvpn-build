@@ -688,7 +688,7 @@ Section "Uninstall"
 	DeleteRegKey HKCR "${PACKAGE_NAME}File"
 	DeleteRegKey HKLM "SOFTWARE\${PACKAGE_NAME}"
 	DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}"
-	DeleteRegKey HKLM "SOFTWARE\Microsoft\Active Setup\Installed Componenets\${PACKAGE_NAME}_UserSetup"
+	DeleteRegKey HKLM "SOFTWARE\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup"
 
 SectionEnd
 
