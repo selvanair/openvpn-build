@@ -10,6 +10,8 @@
 
 SetCompressor lzma
 
+!define PRODUCT_PUBLISHER "OpenVPN Technologies, Inc."
+
 ; Modern user interface
 !include "MUI2.nsh"
 
@@ -71,9 +73,6 @@ InstallDirRegKey HKLM "SOFTWARE\${PACKAGE_NAME}" ""
 
 !define MUI_COMPONENTSPAGE_SMALLDESC
 !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\doc\INSTALL-win32.txt"
-!define MUI_FINISHPAGE_RUN_TEXT "Start OpenVPN GUI"
-!define MUI_FINISHPAGE_RUN "$INSTDIR\bin\openvpn-gui.exe"
-!define MUI_FINISHPAGE_RUN_NOTCHECKED
 
 !define MUI_FINISHPAGE_NOAUTOCLOSE
 !define MUI_ABORTWARNING
@@ -88,14 +87,11 @@ InstallDirRegKey HKLM "SOFTWARE\${PACKAGE_NAME}" ""
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_PAGE_CUSTOMFUNCTION_SHOW StartGUI.show
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_UNPAGE_FINISH
-
-Var /Global strGuiKilled ; Track if GUI was killed so we can tick the checkbox to start it upon installer finish
 
 ;--------------------------------
 ;Languages
@@ -107,17 +103,11 @@ Var /Global strGuiKilled ; Track if GUI was killed so we can tick the checkbox t
 
 LangString DESC_SecOpenVPNUserSpace ${LANG_ENGLISH} "Install ${PACKAGE_NAME} user-space components, including openvpn.exe."
 
-!ifdef USE_OPENVPN_GUI
-	LangString DESC_SecOpenVPNGUI ${LANG_ENGLISH} "Install ${PACKAGE_NAME} GUI by Mathias Sundman"
-!endif
+LangString DESC_SecOpenVPNGUI ${LANG_ENGLISH} "Install ${PACKAGE_NAME} GUI by Mathias Sundman"
 
-!ifdef USE_TAP_WINDOWS
-	LangString DESC_SecTAP ${LANG_ENGLISH} "Install/upgrade the TAP virtual device driver."
-!endif
+LangString DESC_SecTAP ${LANG_ENGLISH} "Install/upgrade the TAP virtual device driver."
 
-!ifdef USE_EASYRSA
-	LangString DESC_SecOpenVPNEasyRSA ${LANG_ENGLISH} "Install ${PACKAGE_NAME} RSA scripts for X509 certificate management."
-!endif
+LangString DESC_SecOpenVPNEasyRSA ${LANG_ENGLISH} "Install ${PACKAGE_NAME} RSA scripts for X509 certificate management."
 
 LangString DESC_SecOpenSSLDLLs ${LANG_ENGLISH} "Install OpenSSL DLLs locally (may be omitted if DLLs are already installed globally)."
 
@@ -125,7 +115,9 @@ LangString DESC_SecLZODLLs ${LANG_ENGLISH} "Install LZO DLLs locally (may be omi
 
 LangString DESC_SecPKCS11DLLs ${LANG_ENGLISH} "Install PKCS#11 helper DLLs locally (may be omitted if DLLs are already installed globally)."
 
-LangString DESC_SecService ${LANG_ENGLISH} "Install the ${PACKAGE_NAME} service wrapper (openvpnserv.exe)"
+LangString DESC_SecService ${LANG_ENGLISH} "Install the ${PACKAGE_NAME} service wrappers"
+
+LangString DESC_SecInteractiveService ${LANG_ENGLISH} "Install the ${PACKAGE_NAME} Interactive Service (allows running OpenVPN-GUI without admin privileges)"
 
 LangString DESC_SecOpenSSLUtilities ${LANG_ENGLISH} "Install the OpenSSL Utilities (used for generating public/private key pairs)."
 
@@ -135,6 +127,7 @@ LangString DESC_SecAddShortcuts ${LANG_ENGLISH} "Add ${PACKAGE_NAME} shortcuts t
 
 LangString DESC_SecFileAssociation ${LANG_ENGLISH} "Register ${PACKAGE_NAME} config file association (*.${OPENVPN_CONFIG_EXT})"
 
+LangString DESC_SecLaunchGUIOnStartup ${LANG_ENGLISH} "Launch ${PACKAGE_NAME} GUI on Windows startup."
 ;--------------------------------
 ;Reserve Files
   
@@ -185,7 +178,7 @@ Section -pre
 	FindWindow $0 "OpenVPN-GUI"
 	StrCmp $0 0 guiNotRunning
 
-	MessageBox MB_YESNO|MB_ICONEXCLAMATION "To perform the specified operation, OpenVPN-GUI needs to be closed. Shall I close it?" /SD IDYES IDNO guiEndNo
+	MessageBox MB_YESNO|MB_ICONEXCLAMATION "To perform the specified operation, OpenVPN-GUI needs to be closed. You will have to restart it manually after the installation has completed. Shall I close it?" /SD IDYES IDNO guiEndNo
 	DetailPrint "Closing OpenVPN-GUI..."
 	Goto guiEndYes
 
@@ -195,14 +188,10 @@ Section -pre
 	guiEndYes:
 		; user wants to close GUI as part of install/upgrade
 		FindWindow $0 "OpenVPN-GUI"
-		IntCmp $0 0 guiClosed
+		IntCmp $0 0 guiNotRunning
 		SendMessage $0 ${WM_CLOSE} 0 0
 		Sleep 100
 		Goto guiEndYes
-
-	guiClosed:
-		; Keep track that we closed the GUI so we can offer to auto (re)start it later
-		StrCpy $strGuiKilled "1"
 
 	guiNotRunning:
 		; check for running openvpn.exe processes
@@ -218,8 +207,9 @@ Section -pre
 		RMDir /r "$SMPROGRAMS\${PACKAGE_NAME}"
 
 		; Stop & Remove previous OpenVPN service
-		DetailPrint "Removing any previous OpenVPN service..."
+		DetailPrint "Removing any previous OpenVPN services..."
 		nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv.exe" -remove'
+		nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv2.exe" -remove'
 		Pop $R0 # return value/error/timeout
 
 		Sleep 3000
@@ -237,11 +227,15 @@ Section /o "${PACKAGE_NAME} User-Space Components" SecOpenVPNUserSpace
 	SetOverwrite on
 
 	SetOutPath "$INSTDIR\bin"
-	File "${OPENVPN_ROOT}\bin\openvpn.exe"
+	${If} ${RunningX64}
+		File "${OPENVPN_ROOT_X86_64}\bin\openvpn.exe"
+	${Else}
+		File "${OPENVPN_ROOT_I686}\bin\openvpn.exe"
+	${EndIf}
 
 	SetOutPath "$INSTDIR\doc"
-	File "${OPENVPN_ROOT}\share\doc\openvpn\INSTALL-win32.txt"
-	File "${OPENVPN_ROOT}\share\doc\openvpn\openvpn.8.html"
+	File "INSTALL-win32.txt"
+	File "${OPENVPN_ROOT_I686}\share\doc\openvpn\openvpn.8.html"
 
 	${If} ${SectionIsSelected} ${SecAddShortcutsWorkaround}
 		CreateDirectory "$SMPROGRAMS\${PACKAGE_NAME}\Documentation"
@@ -256,7 +250,12 @@ Section /o "${PACKAGE_NAME} Service" SecService
 	SetOverwrite on
 
 	SetOutPath "$INSTDIR\bin"
-	File "${OPENVPN_ROOT}\bin\openvpnserv.exe"
+	File /oname=openvpnserv2.exe "${OPENVPNSERV2_EXECUTABLE}"
+	${If} ${RunningX64}
+		File "${OPENVPN_ROOT_X86_64}\bin\openvpnserv.exe"
+	${Else}
+		File "${OPENVPN_ROOT_I686}\bin\openvpnserv.exe"
+	${EndIf}
 
 	SetOutPath "$INSTDIR\config"
 
@@ -269,9 +268,9 @@ Section /o "${PACKAGE_NAME} Service" SecService
 	FileClose $R0
 
 	SetOutPath "$INSTDIR\sample-config"
-	File "${OPENVPN_ROOT}\share\doc\openvpn\sample\sample.${OPENVPN_CONFIG_EXT}"
-	File "${OPENVPN_ROOT}\share\doc\openvpn\sample\client.${OPENVPN_CONFIG_EXT}"
-	File "${OPENVPN_ROOT}\share\doc\openvpn\sample\server.${OPENVPN_CONFIG_EXT}"
+	File "${OPENVPN_ROOT_I686}\share\doc\openvpn\sample\sample.${OPENVPN_CONFIG_EXT}"
+	File "${OPENVPN_ROOT_I686}\share\doc\openvpn\sample\client.${OPENVPN_CONFIG_EXT}"
+	File "${OPENVPN_ROOT_I686}\share\doc\openvpn\sample\server.${OPENVPN_CONFIG_EXT}"
 
 	CreateDirectory "$INSTDIR\log"
 	FileOpen $R0 "$INSTDIR\log\README.txt" w
@@ -296,14 +295,18 @@ Section /o "${PACKAGE_NAME} Service" SecService
 	!insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\${PACKAGE_NAME}" "priority"    "NORMAL_PRIORITY_CLASS"
 	!insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\${PACKAGE_NAME}" "log_append"  "0"
 
-	; install openvpnserv as a service (to be started manually from service control manager)
-	DetailPrint "Installing OpenVPN Service..."
+	; install openvpnserv.exe as a services
+	DetailPrint "Installing OpenVPN Services..."
 	nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv.exe" -install'
+	nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv2.exe" -install'
+
 	Pop $R0 # return value/error/timeout
 
 SectionEnd
 
-!ifdef USE_TAP_WINDOWS
+Section "${PACKAGE_NAME} Interactive Service" SecInteractiveService
+SectionEnd
+
 Section /o "TAP Virtual Ethernet Adapter" SecTAP
 
 	SetOverwrite on
@@ -319,23 +322,33 @@ Section /o "TAP Virtual Ethernet Adapter" SecTAP
 
 	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "tap" "installed"
 SectionEnd
-!endif
 
-!ifdef USE_OPENVPN_GUI
+Section /o "Launch ${PACKAGE_NAME} GUI on Windows startup" SecLaunchGUIOnStartup
+SectionEnd
+
 Section /o "${PACKAGE_NAME} GUI" SecOpenVPNGUI
 
 	SetOverwrite on
 	SetOutPath "$INSTDIR\bin"
 
-	File "${OPENVPN_ROOT}\bin\openvpn-gui.exe"
+	${If} ${RunningX64}
+		File "${OPENVPN_ROOT_X86_64}\bin\openvpn-gui.exe"
+	${Else}
+		File "${OPENVPN_ROOT_I686}\bin\openvpn-gui.exe"
+	${EndIf}
 
 	${If} ${SectionIsSelected} ${SecAddShortcutsWorkaround}
 		CreateDirectory "$SMPROGRAMS\${PACKAGE_NAME}"
 		CreateShortCut "$SMPROGRAMS\${PACKAGE_NAME}\${PACKAGE_NAME} GUI.lnk" "$INSTDIR\bin\openvpn-gui.exe" ""
 		CreateShortcut "$DESKTOP\${PACKAGE_NAME} GUI.lnk" "$INSTDIR\bin\openvpn-gui.exe"
 	${EndIf}
+	${If} ${SectionIsSelected} ${SecLaunchGUIOnStartup}
+		WriteRegStr HKLM "Software\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup" "" "OpenVPN Setup"
+		WriteRegStr HKLM "Software\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup" "Version" "2,4,0,0"
+		WriteRegDword HKLM "Software\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup" "IsInstalled" 0x1
+		WriteRegStr HKLM "Software\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup" "StubPath" "reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v OPENVPN-GUI /t REG_SZ /d $\"$INSTDIR\bin\openvpn-gui.exe$\" /f"
+	${EndIf}
 SectionEnd
-!endif
 
 Section /o "${PACKAGE_NAME} File Associations" SecFileAssociation
 	WriteRegStr HKCR ".${OPENVPN_CONFIG_EXT}" "" "${PACKAGE_NAME}File"
@@ -351,11 +364,14 @@ Section /o "OpenSSL Utilities" SecOpenSSLUtilities
 
 	SetOverwrite on
 	SetOutPath "$INSTDIR\bin"
-	File "${OPENVPN_ROOT}\bin\openssl.exe"
+	${If} ${RunningX64}
+		File "${OPENVPN_ROOT_X86_64}\bin\openssl.exe"
+	${Else}
+		File "${OPENVPN_ROOT_I686}\bin\openssl.exe"
+	${EndIf}
 
 SectionEnd
 
-!ifdef USE_EASYRSA
 Section /o "${PACKAGE_NAME} RSA Certificate Management Scripts" SecOpenVPNEasyRSA
 
 	SetOverwrite on
@@ -379,7 +395,6 @@ Section /o "${PACKAGE_NAME} RSA Certificate Management Scripts" SecOpenVPNEasyRS
 	File "${EASYRSA_ROOT}\Windows\serial.start"
 
 SectionEnd
-!endif
 
 Section /o "Add ${PACKAGE_NAME} to PATH" SecAddPath
 
@@ -406,8 +421,13 @@ SectionGroup "!Dependencies (Advanced)"
 
 		SetOverwrite on
 		SetOutPath "$INSTDIR\bin"
-		File "${OPENVPN_ROOT}\bin\libeay32.dll"
-		File "${OPENVPN_ROOT}\bin\ssleay32.dll"
+		${If} ${RunningX64}
+			File "${OPENVPN_ROOT_X86_64}\bin\libeay32.dll"
+			File "${OPENVPN_ROOT_X86_64}\bin\ssleay32.dll"
+		${Else}
+			File "${OPENVPN_ROOT_I686}\bin\libeay32.dll"
+			File "${OPENVPN_ROOT_I686}\bin\ssleay32.dll"
+		${EndIf}
 
 	SectionEnd
 
@@ -415,7 +435,11 @@ SectionGroup "!Dependencies (Advanced)"
 
 		SetOverwrite on
 		SetOutPath "$INSTDIR\bin"
-		File "${OPENVPN_ROOT}\bin\liblzo2-2.dll"
+		${If} ${RunningX64}
+			File "${OPENVPN_ROOT_X86_64}\bin\liblzo2-2.dll"
+		${Else}
+			File "${OPENVPN_ROOT_I686}\bin\liblzo2-2.dll"
+		${EndIf}
 
 	SectionEnd
 
@@ -423,7 +447,11 @@ SectionGroup "!Dependencies (Advanced)"
 
 		SetOverwrite on
 		SetOutPath "$INSTDIR\bin"
-		File "${OPENVPN_ROOT}\bin\libpkcs11-helper-1.dll"
+		${If} ${RunningX64}
+			File "${OPENVPN_ROOT_X86_64}\bin\libpkcs11-helper-1.dll"
+		${Else}
+			File "${OPENVPN_ROOT_I686}\bin\libpkcs11-helper-1.dll"
+		${EndIf}
 
 	SectionEnd
 
@@ -436,46 +464,33 @@ Function .onInit
 	${GetParameters} $R0
 	ClearErrors
 
-	!insertmacro SelectByParameter ${SecAddShortcutsWorkaround} SELECT_SHORTCUTS 1
-	!insertmacro SelectByParameter ${SecOpenVPNUserSpace} SELECT_OPENVPN 1
-	!insertmacro SelectByParameter ${SecService} SELECT_SERVICE 1
-!ifdef USE_TAP_WINDOWS
-	!insertmacro SelectByParameter ${SecTAP} SELECT_TAP 1
-!endif
-!ifdef USE_OPENVPN_GUI
-	!insertmacro SelectByParameter ${SecOpenVPNGUI} SELECT_OPENVPNGUI 1
-!endif
-	!insertmacro SelectByParameter ${SecFileAssociation} SELECT_ASSOCIATIONS 1
-	!insertmacro SelectByParameter ${SecOpenSSLUtilities} SELECT_OPENSSL_UTILITIES 0
-!ifdef USE_EASYRSA
-	!insertmacro SelectByParameter ${SecOpenVPNEasyRSA} SELECT_EASYRSA 0
-!endif
-	!insertmacro SelectByParameter ${SecAddPath} SELECT_PATH 1
-	!insertmacro SelectByParameter ${SecAddShortcuts} SELECT_SHORTCUTS 1
-	!insertmacro SelectByParameter ${SecOpenSSLDLLs} SELECT_OPENSSLDLLS 1
-	!insertmacro SelectByParameter ${SecLZODLLs} SELECT_LZODLLS 1
-	!insertmacro SelectByParameter ${SecPKCS11DLLs} SELECT_PKCS11DLLS 1
-
-	!insertmacro MULTIUSER_INIT
-	SetShellVarContext all
-
-	; Check if the installer was built for x86_64
-	${If} "${ARCH}" == "x86_64"
-
-		${IfNot} ${RunningX64}
-			; User is running 64 bit installer on 32 bit OS
-			MessageBox MB_OK|MB_ICONEXCLAMATION "This installer is designed to run only on 64-bit systems."
-			Quit
-		${EndIf}
-	
+	${If} ${RunningX64}
 		SetRegView 64
-
 		; Change the installation directory to C:\Program Files, but only if the
 		; user has not provided a custom install location.
 		${If} "$INSTDIR" == "$PROGRAMFILES\${PACKAGE_NAME}"
 			StrCpy $INSTDIR "$PROGRAMFILES64\${PACKAGE_NAME}"
 		${EndIf}
 	${EndIf}
+
+	!insertmacro SelectByParameter ${SecAddShortcutsWorkaround} SELECT_SHORTCUTS 1
+	!insertmacro SelectByParameter ${SecOpenVPNUserSpace} SELECT_OPENVPN 1
+	!insertmacro SelectByParameter ${SecService} SELECT_SERVICE 1
+	!insertmacro SelectByParameter ${SecInteractiveService} SELECT_INTERACTIVE_SERVICE 1
+	!insertmacro SelectByParameter ${SecTAP} SELECT_TAP 1
+	!insertmacro SelectByParameter ${SecOpenVPNGUI} SELECT_OPENVPNGUI 1
+	!insertmacro SelectByParameter ${SecFileAssociation} SELECT_ASSOCIATIONS 1
+	!insertmacro SelectByParameter ${SecOpenSSLUtilities} SELECT_OPENSSL_UTILITIES 0
+	!insertmacro SelectByParameter ${SecOpenVPNEasyRSA} SELECT_EASYRSA 0
+	!insertmacro SelectByParameter ${SecAddPath} SELECT_PATH 1
+	!insertmacro SelectByParameter ${SecAddShortcuts} SELECT_SHORTCUTS 1
+	!insertmacro SelectByParameter ${SecLaunchGUIOnStartup} SELECT_LAUNCH 1
+	!insertmacro SelectByParameter ${SecOpenSSLDLLs} SELECT_OPENSSLDLLS 1
+	!insertmacro SelectByParameter ${SecLZODLLs} SELECT_LZODLLS 1
+	!insertmacro SelectByParameter ${SecPKCS11DLLs} SELECT_PKCS11DLLS 1
+
+	!insertmacro MULTIUSER_INIT
+	SetShellVarContext all
 
 FunctionEnd
 
@@ -485,29 +500,16 @@ FunctionEnd
 Function .onSelChange
 	${If} ${SectionIsSelected} ${SecService}
 		!insertmacro SelectSection ${SecOpenVPNUserSpace}
+	${Else}
+		!insertmacro UnselectSection ${SecInteractiveService}
 	${EndIf}
-!ifdef USE_EASYRSA
 	${If} ${SectionIsSelected} ${SecOpenVPNEasyRSA}
 		!insertmacro SelectSection ${SecOpenSSLUtilities}
 	${EndIf}
-!endif
 	${If} ${SectionIsSelected} ${SecAddShortcuts}
 		!insertmacro SelectSection ${SecAddShortcutsWorkaround}
 	${Else}
 		!insertmacro UnselectSection ${SecAddShortcutsWorkaround}
-	${EndIf}
-FunctionEnd
-
-Function StartGUI.show
-	; if the user chooses not to install the GUI, do not offer to start it
-	${IfNot} ${SectionIsSelected} ${SecOpenVPNGUI}
-		SendMessage $mui.FinishPage.Run ${BM_SETCHECK} ${BST_CHECKED} 0
-		ShowWindow $mui.FinishPage.Run 0
-	${EndIf}
-
-	; if we killed the GUI to do the install/upgrade, automatically tick the "Start OpenVPN GUI" option
-	${If} $strGuiKilled == "1"
-		SendMessage $mui.FinishPage.Run ${BM_SETCHECK} ${BST_CHECKED} 1
 	${EndIf}
 FunctionEnd
 
@@ -533,6 +535,37 @@ Section -post
 	WriteRegExpandStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "UninstallString" "$INSTDIR\Uninstall.exe"
 	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "DisplayIcon" "$INSTDIR\icon.ico"
 	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "DisplayVersion" "${VERSION_STRING}"
+	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "HelpLink" "https://openvpn.net/index.php/open-source.html"
+	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "InstallLocation" "$INSTDIR\"
+	WriteRegDWORD HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "Language" 1033
+	WriteRegDWORD HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "NoModify" 1
+	WriteRegDWORD HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "NoRepair" 1
+	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "Publisher" "${PRODUCT_PUBLISHER}"
+	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "UninstallString" "$INSTDIR\Uninstall.exe"
+	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "URLInfoAbout" "https://openvpn.net"
+
+	${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
+	IntFmt $0 "0x%08X" $0
+	WriteRegDWORD HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "EstimatedSize" "$0"
+
+	; Enable and start the Interactive Service
+	${If} ${SectionIsSelected} ${SecInteractiveService}
+		nsExec::ExecToLog '"$SYSDIR\sc.exe" config OpenVPNServiceInteractive start= auto'
+
+		; Get location of cmd.exe and launch sc.exe inside it to allow
+		; redirecting to nul. This is done because "sc.exe start" output looks a
+		; lot like an error in addition to being too verbose.
+		ReadEnvStr $R0 COMSPEC
+		nsExec::ExecToLog '"$R0" /c "$SYSDIR\sc.exe" start OpenVPNServiceInteractive >nul'
+		Pop $R1
+		${If} "$R1" == "0"
+			DetailPrint "Started OpenVPNServiceInteractive"
+		${Else}
+			DetailPrint "WARNING: $\"sc.exe start OpenVPNServiceInteractive$\" failed with return value of $R1"
+		${EndIf}
+	${Else}
+		nsExec::ExecToLog '"$SYSDIR\sc.exe" config OpenVPNServiceInteractive start= demand'
+	${EndIf}
 
 SectionEnd
 
@@ -542,21 +575,17 @@ SectionEnd
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNUserSpace} $(DESC_SecOpenVPNUserSpace)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecService} $(DESC_SecService)
-	!ifdef USE_OPENVPN_GUI
-		!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNGUI} $(DESC_SecOpenVPNGUI)
-	!endif
-	!ifdef USE_TAP_WINDOWS
-		!insertmacro MUI_DESCRIPTION_TEXT ${SecTAP} $(DESC_SecTAP)
-	!endif
-	!ifdef USE_EASYRSA
-		!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNEasyRSA} $(DESC_SecOpenVPNEasyRSA)
-	!endif
+	!insertmacro MUI_DESCRIPTION_TEXT ${SecInteractiveService} $(DESC_SecInteractiveService)
+	!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNGUI} $(DESC_SecOpenVPNGUI)
+	!insertmacro MUI_DESCRIPTION_TEXT ${SecTAP} $(DESC_SecTAP)
+	!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNEasyRSA} $(DESC_SecOpenVPNEasyRSA)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenSSLUtilities} $(DESC_SecOpenSSLUtilities)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenSSLDLLs} $(DESC_SecOpenSSLDLLs)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecLZODLLs} $(DESC_SecLZODLLs)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecPKCS11DLLs} $(DESC_SecPKCS11DLLs)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecAddPath} $(DESC_SecAddPath)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecAddShortcuts} $(DESC_SecAddShortcuts)
+	!insertmacro MUI_DESCRIPTION_TEXT ${SecLaunchGUIOnStartup} $(DESC_SecLaunchGUIOnStartup)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecFileAssociation} $(DESC_SecFileAssociation)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
@@ -587,33 +616,31 @@ Section "Uninstall"
 	guiClosed:
 
 	; Stop OpenVPN if currently running
-	DetailPrint "Removing OpenVPN Service..."
+	DetailPrint "Removing OpenVPN Services..."
 	nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv.exe" -remove'
+	nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv2.exe" -remove'
 	Pop $R0 # return value/error/timeout
 
 	Sleep 3000
 
-	!ifdef USE_TAP_WINDOWS
-		ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "tap"
-		${If} $R0 == "installed"
-			ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\TAP-Windows" "UninstallString"
-			${If} $R0 != ""
-				DetailPrint "Uninstalling TAP..."
-				nsExec::ExecToLog '"$R0" /S'
-				Pop $R0 # return value/error/timeout
-			${EndIf}
+	ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "tap"
+	${If} $R0 == "installed"
+		ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\TAP-Windows" "UninstallString"
+		${If} $R0 != ""
+			DetailPrint "Uninstalling TAP..."
+			nsExec::ExecToLog '"$R0" /S'
+			Pop $R0 # return value/error/timeout
 		${EndIf}
-	!endif
+	${EndIf}
 
 	${un.EnvVarUpdate} $R0 "PATH" "R" "HKLM" "$INSTDIR\bin"
 
-	!ifdef USE_OPENVPN_GUI
-		Delete "$INSTDIR\bin\openvpn-gui.exe"
-		Delete "$DESKTOP\${PACKAGE_NAME} GUI.lnk"
-	!endif
+	Delete "$INSTDIR\bin\openvpn-gui.exe"
+	Delete "$DESKTOP\${PACKAGE_NAME} GUI.lnk"
 
 	Delete "$INSTDIR\bin\openvpn.exe"
 	Delete "$INSTDIR\bin\openvpnserv.exe"
+	Delete "$INSTDIR\bin\openvpnserv2.exe"
 	Delete "$INSTDIR\bin\libeay32.dll"
 	Delete "$INSTDIR\bin\ssleay32.dll"
 	Delete "$INSTDIR\bin\liblzo2-2.dll"
@@ -632,22 +659,20 @@ Section "Uninstall"
 	Delete "$INSTDIR\icon.ico"
 	Delete "$INSTDIR\Uninstall.exe"
 
-	!ifdef USE_EASYRSA
-		Delete "$INSTDIR\easy-rsa\openssl-1.0.0.cnf"
-		Delete "$INSTDIR\easy-rsa\vars.bat.sample"
-		Delete "$INSTDIR\easy-rsa\init-config.bat"
-		Delete "$INSTDIR\easy-rsa\README.txt"
-		Delete "$INSTDIR\easy-rsa\build-ca.bat"
-		Delete "$INSTDIR\easy-rsa\build-dh.bat"
-		Delete "$INSTDIR\easy-rsa\build-key-server.bat"
-		Delete "$INSTDIR\easy-rsa\build-key.bat"
-		Delete "$INSTDIR\easy-rsa\build-key-pass.bat"
-		Delete "$INSTDIR\easy-rsa\build-key-pkcs12.bat"
-		Delete "$INSTDIR\easy-rsa\clean-all.bat"
-		Delete "$INSTDIR\easy-rsa\index.txt.start"
-		Delete "$INSTDIR\easy-rsa\revoke-full.bat"
-		Delete "$INSTDIR\easy-rsa\serial.start"
-	!endif
+	Delete "$INSTDIR\easy-rsa\openssl-1.0.0.cnf"
+	Delete "$INSTDIR\easy-rsa\vars.bat.sample"
+	Delete "$INSTDIR\easy-rsa\init-config.bat"
+	Delete "$INSTDIR\easy-rsa\README.txt"
+	Delete "$INSTDIR\easy-rsa\build-ca.bat"
+	Delete "$INSTDIR\easy-rsa\build-dh.bat"
+	Delete "$INSTDIR\easy-rsa\build-key-server.bat"
+	Delete "$INSTDIR\easy-rsa\build-key.bat"
+	Delete "$INSTDIR\easy-rsa\build-key-pass.bat"
+	Delete "$INSTDIR\easy-rsa\build-key-pkcs12.bat"
+	Delete "$INSTDIR\easy-rsa\clean-all.bat"
+	Delete "$INSTDIR\easy-rsa\index.txt.start"
+	Delete "$INSTDIR\easy-rsa\revoke-full.bat"
+	Delete "$INSTDIR\easy-rsa\serial.start"
 
 	Delete "$INSTDIR\sample-config\*.${OPENVPN_CONFIG_EXT}"
 
@@ -664,6 +689,8 @@ Section "Uninstall"
 	DeleteRegKey HKCR "${PACKAGE_NAME}File"
 	DeleteRegKey HKLM "SOFTWARE\${PACKAGE_NAME}"
 	DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}"
+	WriteRegDword HKLM "Software\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup" "IsInstalled" 0x0
+	WriteRegStr HKLM "Software\Microsoft\Active Setup\Installed Components\${PACKAGE_NAME}_UserSetup" "StubPath" "reg delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v OPENVPN-GUI /f"
 
 SectionEnd
 
