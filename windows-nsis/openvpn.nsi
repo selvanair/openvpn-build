@@ -596,7 +596,7 @@ Function un.onInit
 	ClearErrors
 	!insertmacro MULTIUSER_UNINIT
 	SetShellVarContext all
-	${If} "${ARCH}" == "x86_64"
+	${If} ${RunningX64}
 		SetRegView 64
 	${EndIf}
 FunctionEnd
