@@ -104,12 +104,9 @@ DownloadDotNET${FrameworkVersion}:
 		IDYES NewDotNET${FrameworkVersion} IDNO GiveUpDotNET${FrameworkVersion}
 	${EndIf}
 
-	DetailPrint "Pausing installation while downloaded .NET Framework installer runs."
-	ExecWait '$TEMP\dotnetfx.exe /q /c:"install /q"'
+	DetailPrint "Starting downloaded .NET Framework installer as stand alone."
+	Exec '$TEMP\dotnetfx.exe'
 
-	DetailPrint "Completed .NET Framework install/update. Removing .NET Framework installer."
-	Delete "$TEMP\dotnetfx.exe"
-	DetailPrint ".NET Framework installer removed."
 	goto NewDotNet${FrameworkVersion}
 
 GiveUpDotNET${FrameworkVersion}:
