@@ -601,10 +601,15 @@ Section -post
 	${Else}
 		DetailPrint "WARNING: $\"sc.exe start OpenVPNServiceInteractive$\" failed with return value of $R1"
 	${EndIf}
+
+	; if no .NET 4, offer to  install it unless silent install
+	IfSilent 0 +2
+	Goto skipNet40
 	${If} ${SectionIsSelected} ${SecService}
-		; if no .NET 4, offer to  install it
 		!insertmacro CheckNetFramework 40Client
 	${Endif}
+
+	skipNet40:
 
 SectionEnd
 
