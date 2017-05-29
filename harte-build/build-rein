@@ -1,0 +1,32 @@
+#!/bin/bash
+user=rlehari
+set -x
+
+ARCH=x86_64
+MAKENSIS=/usr/bin/makensis
+OUTPUT="hartegold-vpn-fixup-rlehari.exe"
+DOMAIN="global.local"
+OPENVPN=openvpn-install-2.4.1-I601.exe
+
+die()
+{ 
+   echo "$1"
+   exit 1
+}
+dospath() {
+	local p="$1"
+	echo "$p" | sed 's/\//\\/g'
+}
+signcode() {
+   osslsigncode -h sha256 -certs ~/GlobalCA/GlobalRootCA/certs/selva-signing.crt -key ~/GlobalCA/GlobalRootCA/certs/selva-signing.key -t "http://timestamp.digicert.com" "$1" "$2" || die "signing failed"
+}
+"${MAKENSIS}" \
+	-DARCH="${ARCH}" \
+	-DPACKAGE_NAME="HarteGold VPN" \
+	-DVERSION_STRING="2.4-harte" \
+	-DOPENVPN_INSTALLER="$(dospath bin/${OPENVPN})" \
+        -DROOT_CA_CERT="config\global-root-ca.crt" \
+	-DOUTPUT="${OUTPUT}" \
+	rein.nsi || die "makensis"
+signcode ${OUTPUT} ${OUTPUT}_signed 
+mv ${OUTPUT}_signed ${OUTPUT}

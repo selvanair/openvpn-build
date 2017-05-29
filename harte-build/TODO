@@ -1,0 +1,2 @@
+- look for remove old mi-gui installation and old service, any 32 bit installs etc.
+- stop gui before starting silent install of the package

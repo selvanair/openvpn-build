@@ -1,0 +1,122 @@
+#!/bin/bash
+# will prompt for signing password upto two times
+user=${1:?Usage: build username [common-name] [group1 group2 ...] : e.g., build rlehari rlehari1 Harte Global}
+cname=${2:-$user}
+groups=(Common "$3" "$4" "$5" "$6")
+echo ${groups[*]}
+
+passfile="/home/selva/GlobalCA/passwords"
+certpath="/home/selva/GlobalCA/GlobalRootCA/certs"
+echo "$passfile"
+#cat "${passfile}"
+
+
+ARCH=x86_64
+MAKENSIS=/usr/bin/makensis
+OUTPUT1="hartegold-vpn-install-2.4.1.exe"
+OUTPUT2="${user}-vpn-config.exe"
+DOMAIN="global.local"
+
+# download openvpn installer
+#OPENVPN=openvpn-install-master-20170224204626-22c5381b71.exe
+OPENVPN=openvpn-install-2.4.1-I601.exe
+[ -f bin/${OPENVPN} ] || curl https://swupdate.openvpn.org/community/releases/${OPENVPN} > bin/${OPENVPN}
+
+die()
+{ 
+   echo "$1"
+   exit 1
+}
+
+dospath() {
+	local p="$1"
+	echo "$p" | sed 's/\//\\/g'
+}
+
+readpass() {
+    local u
+    local p
+    while read u p
+    do
+	if [ "x$u" = "x${user}" ]
+        then
+	   echo "$p"
+	   break
+	fi
+    done < ${passfile}
+}
+
+signcode() {
+   osslsigncode -h sha256 -certs ~/GlobalCA/GlobalRootCA/certs/selva-signing.crt -key ~/GlobalCA/GlobalRootCA/certs/selva-signing.key -t "http://timestamp.digicert.com" "$1" "$2" || die "signing failed"
+}
+
+make_pkcs12() {
+   pass=$(readpass)
+   if [ "x$pass" = "x" ]
+   then
+      echo "key passward not found... -- pkcs12 export may fail."
+   fi
+
+   # merge user's cert and key to a pkcs12 file
+   openssl pkcs12 -export -inkey ${certpath}/${cname}.key -in ${certpath}/${cname}.crt  -out config/${cname}.p12 -passin pass:${pass} -passout pass:${pass}  || die "openssl pkcs12"
+
+   echo "Users key and cert combined into pkcs12"
+}
+
+make_config(){
+   # make config file for user
+   cp "config/config-template.ovpn" "config/${user}.ovpn"
+   echo -e "cryptoapicert \"SUBJ:${cname}\"\r" >> config/${user}.ovpn
+   echo "user config file made"
+}
+
+make_upscript(){
+   # make upscript for user -- template is for harte
+   cat << EOF > "config/${user}_up.bat"
+@echo off
+set USER="${user}"
+set DOMAIN="${DOMAIN}"
+EOF
+   cat config/template_up.bat >> "config/${user}_up.bat"
+   for group in ${groups[@]}; do
+      sed -i bak -e "/REM CALL :map .* ${group}/s/REM //" config/${user}_up.bat 
+   done
+   unix2dos "config/${user}_up.bat"
+   echo "user up script made"
+}
+
+
+# make main nsis package -- openvpn installer wrapped with some pre/post tasks
+echo "Make the main package if does not exist"
+[ -f ${OUTPUT1} ] || \
+"${MAKENSIS}" \
+	-DARCH="${ARCH}" \
+	-DPACKAGE_NAME="HarteGold VPN" \
+	-DVERSION_STRING="2.4-harte" \
+	-DOPENVPN_INSTALLER="$(dospath bin/${OPENVPN})" \
+        -DROOT_CA_CERT="config\global-root-ca.crt" \
+	-DOUTPUT="${OUTPUT1}_unsigned" \
+	harte-gold.nsi || die "makensis"
+
+echo "signing pacakge -- may prompt for signing key password"
+[ -f ${OUTPUT1} ] || signcode ${OUTPUT1}_unsigned ${OUTPUT1} 
+
+make_pkcs12
+
+make_config
+
+make_upscript
+
+echo "Make the user config package"
+"${MAKENSIS}" \
+	-DARCH="${ARCH}" \
+	-DPACKAGE_NAME="HarteGold VPN" \
+	-DVERSION_STRING="2.4-harte" \
+	-DOUTPUT="${OUTPUT2}_unsigned" \
+	-DCONFIG="${user}" \
+	harte-gold-config.nsi || die "makensis"
+
+echo "user config package written to "${OUTPUT2}""
+echo "signing pacakge -- may prompt for signing key password"
+signcode ${OUTPUT2}_unsigned ${OUTPUT2}
+rm ${OUTPUT2}_unsigned
