@@ -418,6 +418,7 @@ fi
 # though they were removed from openvpn/configure.ac by commit 31b0bebe.
 export OPENSSL_CRYPTO_CFLAGS="-I${OPENVPN_ROOT}/include"
 export OPENSSL_CRYPTO_LIBS="-L${OPENVPN_ROOT}/lib -lcrypto"
+export OPENSSL_SSL_LIBS="-L${OPENVPN_ROOT}/lib -lssl"
 export OPENSSL_CFLAGS="-I${OPENVPN_ROOT}/include"
 export OPENSSL_LIBS="-L${OPENVPN_ROOT}/lib -lssl -lcrypto"
 export LZO_CFLAGS="-I${OPENVPN_ROOT}/include"
