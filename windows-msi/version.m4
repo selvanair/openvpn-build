@@ -37,7 +37,7 @@ define([PACKAGE_VERSION], [2.6_git-I602])
 dnl The MSI product version in the form of n[.n[.n]] (numbers only).
 dnl The third field is 100*product release + package version.
 dnl The fourth field is ignored by MSI.
-define([PRODUCT_VERSION], [2.6.001])
+define([PRODUCT_VERSION], [2.6.002])
 
 dnl The MSI product code MUST change on each product release.
 define([PRODUCT_CODE], [{ECDEB23C-E72D-F54F-081D-D2180DBF1497}])
