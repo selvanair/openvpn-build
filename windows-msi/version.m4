@@ -40,7 +40,7 @@ dnl The fourth field is ignored by MSI.
 define([PRODUCT_VERSION], [2.6.002])
 
 dnl The MSI product code MUST change on each product release.
-define([PRODUCT_CODE], [{ECDEB23C-E72D-F54F-081D-D2180DBF1497}])
+define([PRODUCT_CODE], [{ECDEB23C-E72D-F54F-081D-D2180DBF1498}])
 
 dnl The MSI upgrade codes MUST persist for all versions of the same product line.
 dnl Please use own upgrade codes when deploying a non-official OpenVPN release.
